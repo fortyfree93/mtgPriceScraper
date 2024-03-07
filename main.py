@@ -3,6 +3,8 @@ from random_header_generator import HeaderGenerator
 from mtg_single_parser import Mtg_single_parser
 from mtgcard import Card
 
+import concurrent.futures
+from tqdm import tqdm
 
 def fetch_price_with_proxy(card:Card, proxy: str):
     # set formatted field velus for set_name & name
@@ -35,6 +37,17 @@ def fetch_price_with_proxy(card:Card, proxy: str):
         return f"Error occurred for {card.name} (via {proxy}): {str(e)}  url = {url}"
 
 def scrape_card_prices_with_proxies(card_list, proxy_lst, args):
+     """
+    Scrapes the price details for a list of cards using a list of proxies in single tasks.
+
+    Args:
+        card_list (list): A list of Card objects to scrape prices for.
+        proxy_lst (list): A list of proxies to use for the requests.
+        args: Command-line arguments parsed using argparse.
+
+    Returns:
+        list: A list of messages indicating success or failure for each card.
+    """
     results = []
     num_proxies = len(proxy_lst)
     proxy_index = 0  # Initialize the index of the current proxy
@@ -52,6 +65,53 @@ def scrape_card_prices_with_proxies(card_list, proxy_lst, args):
         # Move to the next proxy index (cycling back to 0 if needed)
         proxy_index = (proxy_index + 1) % num_proxies
     
+    return results
+
+def scrape_card_prices_with_proxies_mp(card_list, proxy_lst, args):
+    """
+    Scrapes the price details for a list of cards using a list of proxies in multiple tasks.
+
+    Args:
+        card_list (list): A list of Card objects to scrape prices for.
+        proxy_lst (list): A list of proxies to use for the requests.
+        args: Command-line arguments parsed using argparse.
+
+    Returns:
+        list: A list of messages indicating success or failure for each card.
+    """
+
+    results = []
+    num_proxies = len(proxy_lst)
+
+    # Create a progress bar
+    progress_bar = tqdm(total=len(card_list), desc="Fetching prices", unit="cards")
+
+    def fetch_price(card, proxy):
+        nonlocal progress_bar
+        result = fetch_price_with_proxy(card, proxy)
+        results.append(result)
+        # Update the progress bar
+        progress_bar.update(1)
+
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        futures = []
+        for card in card_list:
+            if args.init and card.last_update != '':
+                # skip if only init is requested
+                logger.debug(f"Skipped: {card.set_name}/{card.name}")
+                progress_bar.update(1)
+                continue
+
+            proxy = proxy_lst[num_proxies % len(proxy_lst)]  # Get the current proxy
+            futures.append(executor.submit(fetch_price, card, proxy))
+            num_proxies += 1
+
+        # Wait for all tasks to complete
+        concurrent.futures.wait(futures)
+
+    # Close the progress bar
+    progress_bar.close()
+
     return results
 
 def read_cards_list(filename):    
@@ -178,7 +238,8 @@ try:
     mtg_single_parser = Mtg_single_parser()   
 
     # do the actual magic
-    results = scrape_card_prices_with_proxies(card_list, proxy_list, args)
+    #results = scrape_card_prices_with_proxies(card_list, proxy_list, args)
+    results = scrape_card_prices_with_proxies_mp(card_list, proxy_list, args)
 
     write_cards_to_csv(args.file_out)
 
