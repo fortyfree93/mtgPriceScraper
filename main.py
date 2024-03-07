@@ -117,8 +117,8 @@ def parse_args():
     # declare command line arguements
     parser = argparse.ArgumentParser(description="Scrape prices from Cardmarket!")   
     parser.add_argument('-i','--init', action='store_true', dest='init', help="only process initial lines (without timestamp)")
-    parser.add_argument('-fi','--file-in',type=str, dest='file_in', help="path to intput file")
-    parser.add_argument('-fo','--file-out', type=str, dest='file_out', help="path to output file")
+    parser.add_argument('-f','--file-in',type=str, dest='file_in', help="path to intput file")
+    parser.add_argument('-o','--file-out', type=str, dest='file_out', help="path to output file")
     parser.add_argument("-p", "--proxy-mode", choices=["spys", "fpl", "file"],dest='proxy_mode', default="spys", help="Proxy retrieval mode")
     
     args, unknown = parser.parse_known_args()
