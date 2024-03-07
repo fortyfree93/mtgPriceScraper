@@ -32,8 +32,12 @@ class Card():
         self.price_details = price_details
 
     def set_formattet_field_values(self):
+        # format the corresponding fields for the call at cardmarket
         self.formatted_card_name = self.name.replace(" ", "-")
         self.formatted_set_name = self.set_name.replace(" ", "-")
+
+        # special case to Map for manaBox
+        self.formatted_set_name = self.formatted_set_name.split(':')[0].strip()
 
     def set_timestamp(self):
         self.last_update = datetime.now().strftime("%Y%m%d%H%M%S")
