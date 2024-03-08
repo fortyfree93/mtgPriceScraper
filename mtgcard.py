@@ -34,6 +34,8 @@ class Card():
     def set_formattet_field_values(self):
         # format the corresponding fields for the call at cardmarket
         self.formatted_card_name = self.name.replace(" ", "-")
+        self.formatted_card_name = self.formatted_card_name.replace("'", "")
+        
         self.formatted_set_name = self.set_name.replace(" ", "-")
 
         # special case to Map for manaBox
