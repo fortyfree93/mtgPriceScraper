@@ -22,7 +22,7 @@ To run the application, use the following command:
 
 ```sh
 python main.py [-h] [-i] [-fi FILE_IN] [-fo FILE_OUT]
-
+```
 ### Command line
 show help
 ```sh
