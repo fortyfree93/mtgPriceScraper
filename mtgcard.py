@@ -32,14 +32,28 @@ class Card():
         self.price_details = price_details
 
     def set_formattet_field_values(self):
-        # format the corresponding fields for the call at cardmarket
-        self.formatted_card_name = self.name.replace(" ", "-")
-        self.formatted_card_name = self.formatted_card_name.replace("'", "")
-        
-        self.formatted_set_name = self.set_name.replace(" ", "-")
+        self.formatted_card_name = self.__format_value(self.name)
+        self.formatted_set_name = self.__format_value(self.set_name)    
 
         # special case to Map for manaBox
         self.formatted_set_name = self.formatted_set_name.split(':')[0].strip()
+
+    def __format_value(self, value) -> str:
+        # format the corresponding fields for the call at cardmarket
+        formatted_value = value.replace(" ", "-")
+        
+        # Check if there is a letter or a space after the apostrophe
+        apostrophe_index = formatted_value.find("'")
+        if apostrophe_index != -1 and apostrophe_index < len(formatted_value) - 1:
+            # If there is a letter after the apostrophe, replace it with "-"
+            if formatted_value[apostrophe_index + 1].isalpha():
+                formatted_value = formatted_value[:apostrophe_index] + "-" + formatted_value[apostrophe_index + 1:]
+            # If there is a space after the apostrophe, remove it
+            elif formatted_value[apostrophe_index + 1] == " ":
+                formatted_value = formatted_value[:apostrophe_index] + formatted_value[apostrophe_index + 1:]
+    
+
+        return formatted_value
 
     def set_timestamp(self):
         self.last_update = datetime.now().strftime("%Y%m%d%H%M%S")
