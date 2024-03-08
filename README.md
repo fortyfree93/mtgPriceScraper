@@ -3,6 +3,9 @@
 ## Introduction
 This application scrapes price details for Magic: The Gathering cards from Cardmarket using proxies and stores the data in a CSV file.
 
+Pricing source: https://www.cardmarket.com/en
+Free proxy sources: https://spys.me/, https://free-proxy-list.net/
+
 ## Installation
 To use this application, follow these steps:
 
