@@ -37,7 +37,7 @@ def fetch_price_with_proxy(card:Card, proxy: str):
         return f"Error occurred for {card.name} (via {proxy}): {str(e)}  url = {url}"
 
 def scrape_card_prices_with_proxies(card_list, proxy_lst, args):
-     """
+    """
     Scrapes the price details for a list of cards using a list of proxies in single tasks.
 
     Args:
