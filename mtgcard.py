@@ -2,7 +2,7 @@ from datetime import datetime
 
 class Card():
 
-    def __init__(self, name, set_code, set_name, collector_number, foil, rarity, quantity, mana_box_id, scryfall_id, purchase_price, misprint, altered, condition, language, purchase_price_currency, last_update):
+    def __init__(self, name, set_code, set_name, collector_number, foil, rarity, quantity, mana_box_id, scryfall_id, purchase_price, misprint, altered, condition, language, purchase_price_currency, last_update, error):
         self.name = name
         self.set_code = set_code
         self.set_name = set_name
@@ -19,14 +19,15 @@ class Card():
         self.language = language
         self.purchase_price_currency = purchase_price_currency                
         self.price_details = {
-            'available': 0,
-            'price_from': 0.0,
-            'price_trend': 0.0,
-            'price_avg_30': 0.0,
-            'price_avg_7': 0.0,
-            'price_avg_1': 0.0
+            'available': None,
+            'price_from': None,
+            'price_trend': None,
+            'price_avg_30': None,
+            'price_avg_7': None,
+            'price_avg_1': None
         }        
         self.last_update = last_update
+        self.error = error
 
     def set_price_details(self, price_details):
         self.price_details = price_details
@@ -57,3 +58,8 @@ class Card():
 
     def set_timestamp(self):
         self.last_update = datetime.now().strftime("%Y%m%d%H%M%S")
+
+    def is_price_details_init(self) -> bool:
+       """Check if price details are initialized"""
+       return all(self.price_details[field] != '' for field in [
+            'available', 'price_from', 'price_trend', 'price_avg_30', 'price_avg_7', 'price_avg_1' ])

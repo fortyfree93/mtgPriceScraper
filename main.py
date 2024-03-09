@@ -1,4 +1,4 @@
-import proxy, argparse, csv, requests, logging
+import proxy, argparse, csv, requests, logging, time
 from random_header_generator import HeaderGenerator
 from mtg_single_parser import Mtg_single_parser
 from mtgcard import Card
@@ -26,7 +26,13 @@ def fetch_price_with_proxy(card:Card, proxy: str):
 
         if response.status_code == 200: 
             #parse html result and set pricing details on card object      
-            mtg_single_parser = Mtg_single_parser(response.text)                   
+            mtg_single_parser = Mtg_single_parser(response.text)
+            if mtg_single_parser.error_msg != None:
+                card.error = True
+                # errors thrown on cardmarket website
+                logger.info(f"retrieved price details: {mtg_single_parser.error_msg}")
+                return f"Failed to fetch data for {url} (via {proxy}: {mtg_single_parser.error_msg})"     
+                       
             card.set_price_details(mtg_single_parser.price_details)
             card.set_timestamp()
 
@@ -53,9 +59,13 @@ def scrape_card_prices_with_proxies(card_list, proxy_lst, args):
     proxy_index = 0  # Initialize the index of the current proxy
     
     for card in card_list:
-        if args.init and card.last_update != '':
+        if args.init and card.is_price_details_init():
             # skip if only init is requested
             logger.debug(f"skiped: {card.set_name}/{card.name}")
+
+            global cnt_complete
+            cnt_complete += 1
+
             continue 
 
         proxy = proxy_lst[proxy_index]  # Get the current proxy
@@ -96,10 +106,15 @@ def scrape_card_prices_with_proxies_mp(card_list, proxy_lst, args):
     with concurrent.futures.ThreadPoolExecutor() as executor:
         futures = []
         for card in card_list:
-            if args.init and card.last_update != '':
+            if args.init and card.is_price_details_init():
                 # skip if only init is requested
                 logger.debug(f"Skipped: {card.set_name}/{card.name}")
                 progress_bar.update(1)
+                
+                # count initialized cases
+                global cnt_complete
+                cnt_complete += 1
+
                 continue
 
             proxy = proxy_lst[num_proxies % len(proxy_lst)]  # Get the current proxy
@@ -135,21 +150,21 @@ def read_cards_list(filename):
                 row.get('Condition', ''),
                 row.get('Language', ''),
                 row.get('Purchase price currency', ''),
-                row.get('last update', '')
+                row.get('last update', ''),
+                row.get('Error', False)
             )
 
             # fill price details, if available
             price_details = {}
-            price_details['available'] = row.get('Available items', '')
-            price_details['price_avg_30'] = row.get('30-days average price', '')
-            price_details['price_avg_7'] = row.get('7-days average price', '')
-            price_details['price_avg_1'] = row.get('1-day average price', '')
-            price_details['price_from'] = row.get('Price from', '')
-            price_details['price_trend'] = row.get('Price trend', '')
+            price_details['available'] = row.get('Available items', None)
+            price_details['price_avg_30'] = row.get('30-days average price', None)
+            price_details['price_avg_7'] = row.get('7-days average price', None)
+            price_details['price_avg_1'] = row.get('1-day average price', None)
+            price_details['price_from'] = row.get('Price from', None)
+            price_details['price_trend'] = row.get('Price trend', None)
             card.set_price_details(price_details)
 
             card_list.append(card)
-
 
 def write_cards_to_csv(filename):   
     with open(filename, mode='w', newline='') as file:
@@ -159,7 +174,7 @@ def write_cards_to_csv(filename):
                          'ManaBox ID', 'Scryfall ID', 'Purchase price', 'Misprint', 'Altered', 'Condition',
                          'Language', 'Purchase price currency',
                          'Available items', 'Price from', 'Price trend', '30-days average price',
-                         '7-days average price', '1-day average price', 'last update'])
+                         '7-days average price', '1-day average price', 'last update','error'])
         # Write data for each card
         for card in card_list:
             writer.writerow([card.name, card.set_code, card.set_name, card.collector_number, card.foil, card.rarity,
@@ -171,7 +186,8 @@ def write_cards_to_csv(filename):
                              card.price_details['price_avg_30'],
                              card.price_details['price_avg_7'],
                              card.price_details['price_avg_1'],
-                             card.last_update])
+                             card.last_update,
+                             card.error ])
 
 def parse_args():
     # declare command line arguements
@@ -207,7 +223,7 @@ fh.setLevel(logging.DEBUG)
 
 # Create console handler and set level to error
 ch = logging.StreamHandler()
-ch.setLevel(logging.ERROR)
+ch.setLevel(logging.INFO)
 
 # Create formatter and set it to both handlers
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -217,6 +233,9 @@ ch.setFormatter(formatter)
 # Add handlers to logger
 logger.addHandler(fh)
 logger.addHandler(ch)
+
+global cnt_complete #counter for completed init/update
+cnt_complete = 0
 
 try:
     args = parse_args()    
@@ -237,11 +256,17 @@ try:
 
     mtg_single_parser = Mtg_single_parser()   
 
-    # do the actual magic
-    #results = scrape_card_prices_with_proxies(card_list, proxy_list, args)
-    results = scrape_card_prices_with_proxies_mp(card_list, proxy_list, args)
+    while cnt_complete < len(card_list):
+        # do the actual magic
+        cnt_complete = 0
+        #results = scrape_card_prices_with_proxies(card_list, proxy_list, args)
+        results = scrape_card_prices_with_proxies_mp(card_list, proxy_list, args)
 
-    write_cards_to_csv(args.file_out)
+        write_cards_to_csv(args.file_out)
+        logger.info(f"Completed cards: {cnt_complete}")
+        
+        # Wait
+        time.sleep(10)
 
 except Exception as e:    
     logger.error(str(e))

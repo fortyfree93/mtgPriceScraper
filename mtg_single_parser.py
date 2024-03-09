@@ -4,26 +4,30 @@ class Mtg_single_parser():
 
     price_details = {}
     listings = []
+    error_msg = None
 
     def __init__(self, raw_html=None) -> None:        
-        self.__reset_details()
+        self.__reset_parser()
 
         if raw_html != None:
             self.raw_html = raw_html
-            self.__retrieve_details()            
+            self.__retrieve_error()
+            if self.error_msg == None:
+                self.__retrieve_details()            
 
-    def __reset_details(self):
+    def __reset_parser(self):
+        self.error_msg = None
         self.price_details = {
-            'available': 0,
-            'price_from': 0.0,
-            'price_trend': 0.0,
-            'price_avg_30': 0.0,
-            'price_avg_7': 0.0,
-            'price_avg_1': 0.0
+            'available': None,
+            'price_from': None,
+            'price_trend': None,
+            'price_avg_30': None,
+            'price_avg_7': None,
+            'price_avg_1': None
         }  
 
     def __retrieve_details(self):
-        self.__reset_details()
+        self.__reset_parser()
                 
         soup = BeautifulSoup(self.raw_html, 'html.parser')
         
@@ -36,6 +40,15 @@ class Mtg_single_parser():
             
             self.__details_data_mapping(key, value)
     
+    def __retrieve_error(self) -> str:
+        """Check if the HTML contains an error pop-up message."""
+        soup = BeautifulSoup(self.raw_html, 'html.parser')
+        error_popups = soup.find_all(class_='alert.alert-danger')
+        if error_popups:
+            error_messages = [popup.find(class_='alert-heading').text.strip() for popup in error_popups]
+            return error_messages
+        return None
+
     def __details_data_mapping(self, raw_field, raw_value):        
         match raw_field:
             case 'Available items':
