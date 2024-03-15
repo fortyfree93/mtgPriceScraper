@@ -59,7 +59,7 @@ class Card():
     def set_timestamp(self):
         self.last_update = datetime.now().strftime("%Y%m%d%H%M%S")
 
-    def is_price_details_init(self) -> bool:
+    def has_price_details(self) -> bool:
        """Check if price details are initialized"""
        return all(self.price_details[field] != '' for field in [
             'available', 'price_from', 'price_trend', 'price_avg_30', 'price_avg_7', 'price_avg_1' ])

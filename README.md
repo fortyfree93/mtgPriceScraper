@@ -41,6 +41,9 @@ options:
                         path to output file
   -p {spys,fpl,file}, --proxy-mode {spys,fpl,file}
                         Proxy retrieval mode
+  -d DELAY, --delay DELAY
+                        delay for http calls in seconds
+  --log                 log to CLI; else log to app.log
 ```
 
 ### File Structure

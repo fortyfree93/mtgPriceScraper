@@ -1,4 +1,4 @@
-import proxy, argparse, csv, requests, logging, time
+import proxy, argparse, csv, requests, logging, time, signal, sys
 from random_header_generator import HeaderGenerator
 from mtg_single_parser import Mtg_single_parser
 from mtgcard import Card
@@ -31,18 +31,18 @@ def fetch_price_with_proxy(card:Card, proxy: str):
                 card.error = True
                 # errors thrown on cardmarket website
                 logger.info(f"retrieved price details: {mtg_single_parser.error_msg}")
-                return f"Failed to fetch data for {url} (via {proxy}: {mtg_single_parser.error_msg})"     
+                logger.error(f"Failed to fetch data for {url} (via {proxy}: {mtg_single_parser.error_msg})")     
                        
             card.set_price_details(mtg_single_parser.price_details)
             card.set_timestamp()
 
             logger.debug(f"retrieved price details: {mtg_single_parser.price_details}")
         else:
-            return f"Failed to fetch data for {url} (via {proxy})"
+            logger.error(f"Failed to fetch data for {url} (via {proxy})")
     except Exception as e:
-        return f"Error occurred for {card.name} (via {proxy}): {str(e)}  url = {url}"
+        logger.error(f"Error occurred for {card.name} (via {proxy}): {str(e)}  url = {url}")
 
-def scrape_card_prices_with_proxies(card_list, proxy_lst, args):
+def scrape_card_prices(card_list, proxy_lst, args):
     """
     Scrapes the price details for a list of cards using a list of proxies in single tasks.
 
@@ -54,80 +54,33 @@ def scrape_card_prices_with_proxies(card_list, proxy_lst, args):
     Returns:
         list: A list of messages indicating success or failure for each card.
     """
-    results = []
     num_proxies = len(proxy_lst)
     proxy_index = 0  # Initialize the index of the current proxy
     
-    for card in card_list:
-        if args.init and card.is_price_details_init():
-            # skip if only init is requested
-            logger.debug(f"skiped: {card.set_name}/{card.name}")
-
-            global cnt_complete
-            cnt_complete += 1
-
-            continue 
-
-        proxy = proxy_lst[proxy_index]  # Get the current proxy
-        result = fetch_price_with_proxy(card, proxy)
-        results.append(result)
-        
-        # Move to the next proxy index (cycling back to 0 if needed)
-        proxy_index = (proxy_index + 1) % num_proxies
-    
-    return results
-
-def scrape_card_prices_with_proxies_mp(card_list, proxy_lst, args):
-    """
-    Scrapes the price details for a list of cards using a list of proxies in multiple tasks.
-
-    Args:
-        card_list (list): A list of Card objects to scrape prices for.
-        proxy_lst (list): A list of proxies to use for the requests.
-        args: Command-line arguments parsed using argparse.
-
-    Returns:
-        list: A list of messages indicating success or failure for each card.
-    """
-
-    results = []
-    num_proxies = len(proxy_lst)
-
-    # Create a progress bar
-    progress_bar = tqdm(total=len(card_list), desc="Fetching prices", unit="cards")
-
-    def fetch_price(card, proxy):
-        nonlocal progress_bar
-        result = fetch_price_with_proxy(card, proxy)
-        results.append(result)
-        # Update the progress bar
-        progress_bar.update(1)
-
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        futures = []
+    # Initialize the progress bar
+    with tqdm(total=len(card_list), desc="Fetching prices", unit="cards") as progress_bar:
         for card in card_list:
-            if args.init and card.is_price_details_init():
+            if args.init and card.has_price_details():
                 # skip if only init is requested
-                logger.debug(f"Skipped: {card.set_name}/{card.name}")
+                logger.debug(f"skipped: {card.set_name}/{card.name}")
                 progress_bar.update(1)
+                continue 
+
+            while True:
+                proxy = proxy_lst[proxy_index]  # Get the current proxy
+                fetch_price_with_proxy(card, proxy)        
                 
-                # count initialized cases
-                global cnt_complete
-                cnt_complete += 1
+                if card.has_price_details():  # Check if the card has been filled
+                    break
+                
+                # Move to the next proxy index (cycling back to 0 if needed)
+                proxy_index = (proxy_index + 1) % num_proxies
 
-                continue
-
-            proxy = proxy_lst[num_proxies % len(proxy_lst)]  # Get the current proxy
-            futures.append(executor.submit(fetch_price, card, proxy))
-            num_proxies += 1
-
-        # Wait for all tasks to complete
-        concurrent.futures.wait(futures)
-
-    # Close the progress bar
-    progress_bar.close()
-
-    return results
+                # delay http calls to decrease polling rate
+                time.sleep(args.delay)
+            
+            # Update the progress bar
+            progress_bar.update(1)
 
 def read_cards_list(filename):    
     with open(filename, newline='', encoding='utf-8-sig') as csvfile:
@@ -196,6 +149,8 @@ def parse_args():
     parser.add_argument('-f','--file-in',type=str, dest='file_in', help="path to intput file")
     parser.add_argument('-o','--file-out', type=str, dest='file_out', help="path to output file")
     parser.add_argument("-p", "--proxy-mode", choices=["spys", "fpl", "file"],dest='proxy_mode', default="spys", help="Proxy retrieval mode")
+    parser.add_argument("-d", "--delay", type=int, dest="delay", default=1, help="delay for http calls in seconds" )
+    parser.add_argument("--log" , action='store_true', dest='log', help="log to CLI; False logs to app.log")
     
     args, unknown = parser.parse_known_args()
 
@@ -211,38 +166,54 @@ def parse_args():
 
     return args    
 
+def init_logger(args) -> logging.Logger:
+    # Create logger
+    logger = logging.getLogger('CM-MTG-Price-Scraper')
+    logger.setLevel(logging.DEBUG)
+
+    # Create file handler and set level to debug
+    fh = logging.FileHandler('app.log')
+    fh.setLevel(logging.DEBUG)
+
+    # Create formatter and set it to the file handler
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    fh.setFormatter(formatter)
+
+    # Add file handler to logger
+    logger.addHandler(fh)
+
+    # Add console handler if --log is True
+    if args.log:
+        # Create console handler and set level to error
+        ch = logging.StreamHandler()
+        ch.setLevel(logging.INFO)
+
+        # Add formatter to the console handler
+        ch.setFormatter(formatter)
+
+        # Add console handler to logger
+        logger.addHandler(ch)
+    
+    return logger
+
+def signal_handler(sig, frame):
+    print('\nCtrl+C detected. Exiting gracefully...')
+    sys.exit(0)
 #---------------------------------------------------------------------------
 
-# Create logger
-logger = logging.getLogger('CM-MTG-Price-Scraper')
-logger.setLevel(logging.DEBUG)
-
-# Create file handler and set level to debug
-fh = logging.FileHandler('app.log')
-fh.setLevel(logging.DEBUG)
-
-# Create console handler and set level to error
-ch = logging.StreamHandler()
-ch.setLevel(logging.INFO)
-
-# Create formatter and set it to both handlers
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-fh.setFormatter(formatter)
-ch.setFormatter(formatter)
-
-# Add handlers to logger
-logger.addHandler(fh)
-logger.addHandler(ch)
-
-global cnt_complete #counter for completed init/update
-cnt_complete = 0
-
 try:
-    args = parse_args()    
+    #parse args
+    args = parse_args()
+
+    # Register the signal handler for CTRL+C
+    signal.signal(signal.SIGINT, signal_handler)
+
+    # init logger for logging
+    logger = init_logger(args)
     logger.info(f"Starting wiht params: {args}")
 
-    card_list = []
     # read cards form given .csv file
+    card_list = []    
     read_cards_list(args.file_in)
     logger.info(f"Retrieved items from .csv: {len(card_list)}")    
 
@@ -254,19 +225,10 @@ try:
     # init http header generator
     header_generator = HeaderGenerator(user_agents = 'scrape')    
 
-    mtg_single_parser = Mtg_single_parser()   
+    #scrape_card_prices_mp(card_list, proxy_list, args) Obsolete
+    scrape_card_prices(card_list,proxy_list, args)
 
-    while cnt_complete < len(card_list):
-        # do the actual magic
-        cnt_complete = 0
-        #results = scrape_card_prices_with_proxies(card_list, proxy_list, args)
-        results = scrape_card_prices_with_proxies_mp(card_list, proxy_list, args)
-
-        write_cards_to_csv(args.file_out)
-        logger.info(f"Completed cards: {cnt_complete}")
-        
-        # Wait
-        time.sleep(10)
+    write_cards_to_csv(args.file_out)   
 
 except Exception as e:    
     logger.error(str(e))
