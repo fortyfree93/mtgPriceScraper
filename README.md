@@ -42,3 +42,23 @@ options:
   -p {spys,fpl,file}, --proxy-mode {spys,fpl,file}
                         Proxy retrieval mode
 ```
+
+### File Structure
+The input .csv file expects the following fields for each card:
+- name
+- set_code
+- set_name
+- collector_number
+- foil
+- rarity
+- quantity
+- mana_box_id 
+- scryfall_id
+- purchase_price
+- misprint
+- altered
+- condition
+- language
+- purchase_price_currency
+
+this is basically the layout provided by the export of https://www.manabox.app/ 
