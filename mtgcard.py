@@ -7,7 +7,12 @@ class Card():
         self.set_code = set_code
         self.set_name = set_name
         self.collector_number = collector_number
-        self.foil = foil
+
+        if foil == 'foil' or foil == 'True':
+            self.foil = True
+        else:
+            self.foil = False
+
         self.rarity = rarity
         self.quantity = quantity
         self.mana_box_id = mana_box_id
@@ -27,7 +32,11 @@ class Card():
             'price_avg_1': None
         }        
         self.last_update = last_update
-        self.error = error
+        
+        if error == '':
+            self.error = None
+        else:
+            self.error = error
 
     def set_price_details(self, price_details):
         self.price_details = price_details
@@ -36,8 +45,15 @@ class Card():
         self.formatted_card_name = self.__format_value(self.name)
         self.formatted_set_name = self.__format_value(self.set_name)    
 
-        # special case to Map for manaBox
-        self.formatted_set_name = self.formatted_set_name.split(':')[0].strip()
+        # Special case for "Duel Decks" sets
+        if self.formatted_set_name.startswith('Duel-Decks'):
+            self.formatted_set_name = self.formatted_set_name.split(':')[0].strip()
+        else:
+            self.formatted_set_name = self.formatted_set_name.replace(':', '').strip()
+
+        # Special case for card names that contain ','
+        self.formatted_card_name = self.formatted_card_name.replace(',', '').strip()
+
 
     def __format_value(self, value) -> str:
         # format the corresponding fields for the call at cardmarket
@@ -46,14 +62,17 @@ class Card():
         # Check if there is a letter or a space after the apostrophe
         apostrophe_index = formatted_value.find("'")
         if apostrophe_index != -1 and apostrophe_index < len(formatted_value) - 1:
+            
+            # If there is an 's' after the apostrophe, simply remove the apostrophe
+            if formatted_value[apostrophe_index + 1] == "s":
+                formatted_value = formatted_value[:apostrophe_index] + formatted_value[apostrophe_index + 1:]
             # If there is a letter after the apostrophe, replace it with "-"
-            if formatted_value[apostrophe_index + 1].isalpha():
-                formatted_value = formatted_value[:apostrophe_index] + "-" + formatted_value[apostrophe_index + 1:]
+            elif formatted_value[apostrophe_index + 1].isalpha():
+                formatted_value = formatted_value[:apostrophe_index] + "-" + formatted_value[apostrophe_index + 1:]            
             # If there is a space after the apostrophe, remove it
             elif formatted_value[apostrophe_index + 1] == " ":
                 formatted_value = formatted_value[:apostrophe_index] + formatted_value[apostrophe_index + 1:]
     
-
         return formatted_value
 
     def set_timestamp(self):

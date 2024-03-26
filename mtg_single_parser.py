@@ -43,11 +43,11 @@ class Mtg_single_parser():
     def __retrieve_error(self) -> str:
         """Check if the HTML contains an error pop-up message."""
         soup = BeautifulSoup(self.raw_html, 'html.parser')
-        error_popups = soup.find_all(class_='alert.alert-danger')
+        #error_popups = soup.find_all(class_='alert.alert-danger')
+        error_popups = soup.find_all(class_='alert')
         if error_popups:
             error_messages = [popup.find(class_='alert-heading').text.strip() for popup in error_popups]
-            return error_messages
-        return None
+            self.error_msg = error_messages[0]        
 
     def __details_data_mapping(self, raw_field, raw_value):        
         match raw_field:

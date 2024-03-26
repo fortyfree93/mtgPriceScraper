@@ -2,14 +2,20 @@ import proxy, argparse, csv, requests, logging, time, signal, sys
 from random_header_generator import HeaderGenerator
 from mtg_single_parser import Mtg_single_parser
 from mtgcard import Card
-
-import concurrent.futures
 from tqdm import tqdm
+
+def constuct_url(card:Card) -> str:
+    url = f'https://www.cardmarket.com/en/Magic/Products/Singles/{card.formatted_set_name}/{card.formatted_card_name}'
+
+    if card.foil:
+        url = url + '?isFoil=Y'
+    
+    return url
 
 def fetch_price_with_proxy(card:Card, proxy: str):
     # set formatted field velus for set_name & name
     card.set_formattet_field_values()
-    url = f'https://www.cardmarket.com/en/Magic/Products/Singles/{card.formatted_set_name}/{card.formatted_card_name}'    
+    url = constuct_url(card=card)        
 
     logger.debug(f"{card.set_name}/{card.name} request (via {proxy}): {url}")
 
@@ -28,7 +34,7 @@ def fetch_price_with_proxy(card:Card, proxy: str):
             #parse html result and set pricing details on card object      
             mtg_single_parser = Mtg_single_parser(response.text)
             if mtg_single_parser.error_msg != None:
-                card.error = True
+                card.error = mtg_single_parser.error_msg
                 # errors thrown on cardmarket website
                 logger.info(f"retrieved price details: {mtg_single_parser.error_msg}")
                 logger.error(f"Failed to fetch data for {url} (via {proxy}: {mtg_single_parser.error_msg})")     
@@ -60,25 +66,35 @@ def scrape_card_prices(card_list, proxy_lst, args):
     # Initialize the progress bar
     with tqdm(total=len(card_list), desc="Fetching prices", unit="cards") as progress_bar:
         for card in card_list:
-            if args.init and card.has_price_details():
+            if card.error != None or \
+                ( args.init and card.has_price_details() ):
+
                 # skip if only init is requested
                 logger.debug(f"skipped: {card.set_name}/{card.name}")
                 progress_bar.update(1)
                 continue 
 
-            while True:
+            consecutive_errors = 0  # Initialize consecutive errors counter for the current card
+            while consecutive_errors < args.threshold:
                 proxy = proxy_lst[proxy_index]  # Get the current proxy
                 fetch_price_with_proxy(card, proxy)        
                 
                 if card.has_price_details():  # Check if the card has been filled
                     break
                 
+                consecutive_errors += 1
+
                 # Move to the next proxy index (cycling back to 0 if needed)
                 proxy_index = (proxy_index + 1) % num_proxies
 
                 # delay http calls to decrease polling rate
                 time.sleep(args.delay)
-            
+                        
+            if consecutive_errors >= args.threshold:
+                # Log the error indicating the threshold is reached
+                logger.error(f"Threshold reached for {card.name}. Scraping aborted.")            
+                card.error = consecutive_errors
+
             # Update the progress bar
             progress_bar.update(1)
 
@@ -104,7 +120,7 @@ def read_cards_list(filename):
                 row.get('Language', ''),
                 row.get('Purchase price currency', ''),
                 row.get('last update', ''),
-                row.get('Error', False)
+                row.get('error', '')
             )
 
             # fill price details, if available
@@ -149,8 +165,9 @@ def parse_args():
     parser.add_argument('-f','--file-in',type=str, dest='file_in', help="path to intput file")
     parser.add_argument('-o','--file-out', type=str, dest='file_out', help="path to output file")
     parser.add_argument("-p", "--proxy-mode", choices=["spys", "fpl", "file"],dest='proxy_mode', default="spys", help="Proxy retrieval mode")
-    parser.add_argument("-d", "--delay", type=int, dest="delay", default=1, help="delay for http calls in seconds" )
-    parser.add_argument("--log" , action='store_true', dest='log', help="log to CLI; False logs to app.log")
+    parser.add_argument("-d", "--delay", type=int, dest="delay", default=1, help="delay for http calls in seconds")
+    parser.add_argument("-t", "--threshold", type=int, dest="threshold", default=15, help="number of errors")
+    parser.add_argument("--log" , action='store_true', dest='log', help="log to CLI; False -> logs to app.log")
     
     args, unknown = parser.parse_known_args()
 
@@ -198,9 +215,11 @@ def init_logger(args) -> logging.Logger:
 
 def signal_handler(sig, frame):
     print('\nCtrl+C detected. Exiting gracefully...')
+    write_cards_to_csv(args.file_out)
+    logger.info(f"Program exectution abort")
     sys.exit(0)
-#---------------------------------------------------------------------------
 
+#---------------------------------------------------------------------------
 try:
     #parse args
     args = parse_args()
